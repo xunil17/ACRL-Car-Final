@@ -1,0 +1,2 @@
+model_checkpoint_path: "/home/sean/RL-2018/src/DQN_Agent/models/no_conv/data.chkp-1471"
+all_model_checkpoint_paths: "/home/sean/RL-2018/src/DQN_Agent/models/no_conv/data.chkp-1471"

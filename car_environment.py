@@ -45,10 +45,11 @@ class CarEnvironment:
         self.env.render()
 
     # takes one step with action as input (u), returns processed next state which is LazyFrame with four frames in it
-    def step(self, action):
+    def step(self, action, test=False):
         action = self.map_action(action)
         total_reward = 0
-        n = random.choice([2,3,4])
+        # n = random.choice([2,3,4])
+        n = 1 if test else random.choice([2,3,4])
         for _ in range(n):
             next_state, reward, done, info = self.env.step(action)
             total_reward += reward
@@ -73,10 +74,10 @@ class CarEnvironment:
         return frame
       
 
-    def reset(self):
+    def reset(self, test=False):
         if self.seed:
             self.env.seed(random.choice(self.seed))
-        self.flip_episode = random.random() > 0.5 and self.flip
+        self.flip_episode = random.random() > 0.5 and not test and self.flip
         # self.flip_episode = True
         return self.process(self.env.reset())
 
@@ -102,6 +103,7 @@ class LazyFrames(object):
         """This object ensures that common frames between the observations are only stored once.
         It exists purely to optimize memory usage which can be huge for DQN's 1M frames replay
         buffers.
+
         This object should only be converted to numpy array before being passed to the model."""
         self._frames = frames
         self._out = None

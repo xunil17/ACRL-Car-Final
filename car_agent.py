@@ -23,7 +23,7 @@ class CarAgent:
     def __init__(self, batch_size, memory_capacity, num_episodes, learning_rate_drop_frame_limit,
             target_update_frequency, discount = 0.99, delta = 1, model_name = None):
     
-        self.env = CarEnvironment()
+        self.env = CarEnvironment(seed = [104, 106, 108])
         self.architecture = NeuralNet()
         self.explore_rate = Decay_Explore_Rate()
         self.learning_rate = Basic_Learning_Rate()
@@ -113,6 +113,56 @@ class CarAgent:
 
         self.sess.graph.finalize()
 
+    # Description: Chooses action wrt an e-greedy policy. 
+    # Parameters:
+    # - state:      Tensor representing a single state
+    # - epsilon:    Number in (0,1)
+    # Output:       Integer in the range 0...self.action_size-1 representing an action
+    def get_action(self, state, epsilon):
+        # Performing epsilon-greedy action selection
+        if random.random() < epsilon:
+            return self.env.sample_action_space()
+        else:
+            return self.sess.run(self.Q_argmax, feed_dict={self.state_tf: [state]})[0]
+
+    # Description: Tests the model
+    # Parameters:
+    # - num_test_episodes:  Integer, giving the number of episodes to be tested over
+    # - visualize:          Boolean, gives whether should render the testing gameplay
+    def test(self, num_test_episodes, visualize):
+        rewards = []
+        for episode in range(num_test_episodes):
+            done = False
+            state = np.array(self.env.reset(test=True))
+            episode_reward = 0
+            if not visualize:
+                self.test_env.render()
+            while not done:
+                if visualize:
+                    self.env.render()
+                action = self.get_action(state, epsilon=0)
+                next_state, reward, done, info = self.env.step(action, test=True)
+                next_state = np.array(next_state)
+                state = next_state
+                episode_reward += reward
+                done = info['true_done']
+            rewards.append(episode_reward)
+        return np.mean(rewards), np.std(rewards), rewards
+
+    # Description: Returns average Q-value over some number of fixed tracks
+    # Parameters:   None
+    # Output:       None
+    def estimate_avg_q(self):
+        if not self.q_grid:
+            return 0
+        return np.average(np.amax(self.sess.run(self.Q_value, feed_dict={self.state_tf: self.q_grid}), axis=1))
+
+    # Description: Loads a model trained in a previous session
+    # Parameters:
+    # - path:   String, giving the path to the checkpoint file to be loaded
+    # Output:   None
+    def load(self, path):
+        self.saver.restore(self.sess, path)
 
 
 if __name__ == '__main__':
@@ -130,3 +180,8 @@ if __name__ == '__main__':
 
 
     car_agent = CarAgent(model_name=name, **parameters)
+    ########################### Train Model ##########################
+
+    ########################### Test Model ##########################3
+    car_agent.load("/home/sean/RL-2018/src/DQN_Agent/models/no_conv/data.chkp-1471")
+    car_agent.test(5, True)

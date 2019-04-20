@@ -2,6 +2,7 @@ import gym
 import numpy as np
 import random
 from image_process import process_image
+from collections import deque
 import cv2
 import sys
 import time
@@ -22,15 +23,28 @@ class CarEnvironment:
         self.action_space_size = 5
         self.state_shape = [None, self.stacked_frames] + list(self.image_dimension)
 
-        self.history = []
+        self.frames = deque([], maxlen = stacked_frames)
+        #prepopulate frames with zeros
+        for _ in range(0,self.stacked_frames):
+            zeros = np.zeros(self.image_dimension)
+            self.frames.append(zeros)
+
         self.action_dict = {0: [-1, 0, 0], 1: [1, 0, 0], 2: [0, 1, 0], 3: [0, 0, 0.8], 4: [0, 0, 0]}
         self.seed = seed
         self.flip = flip
         self.flip_episode = False
 
+    # shows windows for each image in lazy frame (usually processed next state)
+    def show_images_lazy(self, lazyframe):
+        frame_np = np.array(lazyframe)
+        for num in range(0,self.stacked_frames):
+            cv2.imshow('image' + str(num), frame_np[num])
+
+    #renders environment
     def render(self):
         self.env.render()
 
+    # takes one step with action as input (u), returns processed next state which is LazyFrame with four frames in it
     def step(self, action):
         action = self.map_action(action)
         total_reward = 0
@@ -42,28 +56,25 @@ class CarEnvironment:
             if done:
                 break
 
+        #processed_next_state is lazy frame with numpy array of 4x96x96
         processed_next_state = self.process(next_state)
+        self.show_images_lazy(processed_next_state)
+
+        # print processed_next_state
+        # cv2.imshow('image', processed_next_state)
         return processed_next_state, total_reward, done, info
 
+    # adds last state to history array
     def process(self, state):
-        self.add_history(state)
-        if len(self.history) < self.stacked_frames:
-            zeros = np.zeros(self.image_dimension)
-            result = np.tile(zeros, ((self.stacked_frames - len(self.history)), 1, 1))
-            result = np.concatenate((result, np.array(self.history)))
-        else:
-            result = np.array(self.history)
-        return result
-
-
-    def add_history(self, state):
-        if len(self.history) >= self.stacked_frames:
-            self.history.pop(0)
         processed_image = process_image(state, flip=self.flip_episode)
-        print (processed_image.shape)
-        cv2.imshow('image', processed_image)
-        self.history.append(processed_image)
-        
+        self.frames.append(processed_image)
+
+        frame = LazyFrames(list(self.frames))
+        # frame_np = np.array(frame)
+        # print (frame_np.shape)
+
+        return frame
+      
 
     def reset(self):
         if self.seed:
@@ -88,10 +99,40 @@ class CarEnvironment:
     def __str__(self):
         return self.name + '\nseed: {0}'.format(self.seed)
 
+
+class LazyFrames(object):
+    def __init__(self, frames):
+        """This object ensures that common frames between the observations are only stored once.
+        It exists purely to optimize memory usage which can be huge for DQN's 1M frames replay
+        buffers.
+        This object should only be converted to numpy array before being passed to the model."""
+        self._frames = frames
+        self._out = None
+
+    def _force(self):
+        if self._out is None:
+            
+            # self._out = np.concatenate(self._frames, axis=-1)
+            self._out = np.stack(self._frames, axis=0)
+            self._frames = None
+        return self._out
+
+    def __array__(self, dtype=None):
+        out = self._force()
+        if dtype is not None:
+            out = out.astype(dtype)
+        return out
+
+    def __len__(self):
+        return len(self._force())
+
+    def __getitem__(self, i):
+        return self._force()[..., i]
+
 if __name__ == '__main__':
     env = CarEnvironment(flip = True)
     env.reset()
-    for _ in range(100):
+    for _ in range(20):
         env.render()
         env.step(env.sample_action_space())
         cv2.waitKey()

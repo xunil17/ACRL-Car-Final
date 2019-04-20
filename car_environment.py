@@ -4,8 +4,8 @@ import random
 from image_process import process_image
 from collections import deque
 import cv2
-import sys
-import time
+# import sys
+# import time
 
 class CarEnvironment:
 
@@ -58,10 +58,7 @@ class CarEnvironment:
 
         #processed_next_state is lazy frame with numpy array of 4x96x96
         processed_next_state = self.process(next_state)
-        self.show_images_lazy(processed_next_state)
-
-        # print processed_next_state
-        # cv2.imshow('image', processed_next_state)
+        # self.show_images_lazy(processed_next_state)
         return processed_next_state, total_reward, done, info
 
     # adds last state to history array

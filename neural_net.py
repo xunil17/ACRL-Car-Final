@@ -5,6 +5,7 @@ import tensorflow as tf
 import numpy as np
 
 class NeuralNet:
+	# input and action_size are tf.placeholders
     def evaluate(self, input, action_size):
         layer1_out = tf.layers.conv2d(input, filters=32, kernel_size=[8,8],
             strides=[4,4], padding='same', activation=tf.nn.relu,  

@@ -58,6 +58,9 @@ class Replay_Memory:
         reward_batch = [data[2] for data in mini_batch]
         next_state_batch = [data[3] for data in mini_batch]
         done_batch = [data[4] for data in mini_batch]
+        state_batch = [np.array(item) for item in state_batch]
+        next_state_batch = [np.array(item) for item in next_state_batch]
+        # print (done_batch)
         return state_batch, action_batch, reward_batch, next_state_batch, done_batch
 
     # To add an episode into the memory
@@ -66,11 +69,11 @@ class Replay_Memory:
     # action defines the action taken
     # reward defines the reward returned based on the state and action
     # next_state defines the current stack of images
-    def add(self, agent, state, action, reward, next_state, done):
+    def add(self, agent, state_lazy, action, reward, next_state_lazy, done):
         # convert the action to one hot action for easier computation
         one_hot_action = np.zeros(agent.action_size)
         one_hot_action[action] = 1
-        self.memory.append((state, one_hot_action, reward, next_state, done))
+        self.memory.append((state_lazy, one_hot_action, reward, next_state_lazy, done))
         # delete the earliest episode if memory is full
         if (len(self.memory) > self.memory_capacity):
             self.memory.pop(0)

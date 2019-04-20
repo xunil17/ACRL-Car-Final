@@ -52,7 +52,7 @@ class CarAgent:
         self.state_shape = self.env.state_shape
         self.q_grid = None
 
-        # Tf placeholders
+        # Tf placeholders - feeds data into neural net from outside
         self.state_tf = tf.placeholder(shape=self.state_shape, dtype=tf.float32, name='state_tf')
         self.action_tf = tf.placeholder(shape=[None, self.action_size], dtype=tf.float32, name='action_tf')
         self.y_tf = tf.placeholder(dtype=tf.float32, name='y_tf')
@@ -61,6 +61,7 @@ class CarAgent:
         self.avg_q = tf.placeholder(dtype=tf.float32, name='avg_q')
 
         # Keep track of episode and frames
+        # Variables are used to store information about neural net
         self.episode = tf.Variable(initial_value=0, trainable=False, name='episode')
         self.frames = tf.Variable(initial_value=0, trainable=False, name='frames')
         self.increment_frames_op = tf.assign(self.frames, self.frames + 1, name='increment_frames_op')
@@ -97,6 +98,7 @@ class CarAgent:
         config.log_device_placement = False
         self.sess = tf.Session(config=config)
         self.trainable_variables = tf.trainable_variables()
+        print (self.trainable_variables)
 
         # Tensorboard setup
         self.writer = tf.summary.FileWriter(self.log_path)
@@ -112,6 +114,81 @@ class CarAgent:
         self.fixed_target_weights = self.sess.run(self.trainable_variables)
 
         self.sess.graph.finalize()
+
+    # Description: Performs one step of batch gradient descent on the DDQN loss function. 
+    # Parameters:
+    # - alpha: Number, the learning rate 
+    # Output: None
+    def experience_replay(self, alpha):
+        state_batch, action_batch, reward_batch, next_state_batch, done_batch = self.replay_memory.get_mini_batch(self.training_metadata)
+        y_batch = [None] * self.replay_memory.batch_size
+        fixed_feed_dict = {self.state_tf: next_state_batch}
+        fixed_feed_dict.update(zip(self.trainable_variables, self.fixed_target_weights))
+
+        greedy_actions = self.sess.run(self.onehot_greedy_action, feed_dict={self.state_tf: next_state_batch})
+        fixed_feed_dict.update({self.action_tf: greedy_actions})
+        Q_batch = self.sess.run(self.Q_value_at_action, feed_dict=fixed_feed_dict)
+
+        y_batch = reward_batch + self.discount * np.multiply(np.invert(done_batch), Q_batch)
+
+        feed = {self.state_tf: state_batch, self.action_tf: action_batch, self.y_tf: y_batch, self.alpha: alpha}
+        self.sess.run(self.train_op, feed_dict=feed)
+
+    # Description: Updates the weights of the target network
+    # Parameters:   None
+    # Output:       None
+    def update_fixed_target_weights(self):
+        self.fixed_target_weights = self.sess.run(self.trainable_variables)
+
+
+    # Trains the model
+    def train(self):
+        # while self.sess.run(self.episode) < self.training_metadata.num_episodes:
+
+        #basically grapb the episode number from the neural net
+        episode = self.sess.run(self.episode)
+        self.training_metadata.increment_episode()
+        # increments the episode in the neural net
+        self.sess.run(self.increment_episode_op)
+
+        # set up car environment
+        state_lazy = self.env.reset()
+        self.env.render()
+
+        done = False
+        epsilon = self.explore_rate.get(self.training_metadata)
+        alpha = self.learning_rate.get(self.training_metadata)
+
+        print("Episode {0}/{1} \t Epsilon: {2} \t Alpha: {3}".format(episode, self.training_metadata.num_episodes, epsilon, alpha))
+        print ("Replay Memory: %d" % self.replay_memory.length())
+        episode_frame = 0
+
+        while not done:
+
+            # Update target weights every update frequency
+            if self.training_metadata.frame % self.target_update_frequency == 0 and (self.training_metadata.frame != 0):
+                self.update_fixed_target_weights()
+
+            # Choose and perform action and update replay memory
+            action = self.get_action(np.array(state_lazy), epsilon)
+            next_state_lazy, reward, done, info = self.env.step(action)
+
+            episode_frame += 1
+
+            self.replay_memory.add(self, state_lazy, action, reward, next_state_lazy, done)
+
+            # Train with replay memory if populated
+            if self.replay_memory.length() > 10 * self.replay_memory.batch_size:
+                self.sess.run(self.increment_frames_op)
+                self.training_metadata.increment_frame()
+                self.experience_replay(alpha)
+
+            state_lazy = next_state_lazy
+            done = info['true_done']
+
+
+
+
 
     # Description: Chooses action wrt an e-greedy policy. 
     # Parameters:
@@ -133,7 +210,8 @@ class CarAgent:
         rewards = []
         for episode in range(num_test_episodes):
             done = False
-            state = np.array(self.env.reset(test=True))
+            state_lazy = self.env.reset(test=True)
+            state = np.array(state_lazy)
             episode_reward = 0
             if not visualize:
                 self.test_env.render()
@@ -141,9 +219,8 @@ class CarAgent:
                 if visualize:
                     self.env.render()
                 action = self.get_action(state, epsilon=0)
-                next_state, reward, done, info = self.env.step(action, test=True)
-                next_state = np.array(next_state)
-                state = next_state
+                next_state_lazy, reward, done, info = self.env.step(action, test=True)
+                state = np.array(next_state_lazy)
                 episode_reward += reward
                 done = info['true_done']
             rewards.append(episode_reward)
@@ -167,11 +244,12 @@ class CarAgent:
 
 if __name__ == '__main__':
     parameters = {
-    'target_update_frequency': 1000,
-    'batch_size': 32, 
-    'memory_capacity': 50000, 
-    'num_episodes': 3000,
-    'learning_rate_drop_frame_limit': 250000}
+    'target_update_frequency': 1000, # number of frames between each target Q update
+    'batch_size': 32, # define size of mini-batch
+    'memory_capacity': 50000,  #capacity of replay memory
+    'num_episodes': 3000, # number of training episodes
+    'learning_rate_drop_frame_limit': 250000 #number of frames exploration rate decays over
+    }
 
     try:
         name = sys.argv[1]
@@ -182,6 +260,8 @@ if __name__ == '__main__':
     car_agent = CarAgent(model_name=name, **parameters)
     ########################### Train Model ##########################
 
+    car_agent.train()
+
     ########################### Test Model ##########################3
-    car_agent.load("/home/sean/RL-2018/src/DQN_Agent/models/no_conv/data.chkp-1471")
-    car_agent.test(5, True)
+    # car_agent.load("/home/sean/RL-2018/src/DQN_Agent/models/no_conv/data.chkp-1471")
+    # car_agent.test(5, True)

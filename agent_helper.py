@@ -53,13 +53,13 @@ class Replay_Memory:
     # To randomly sample a minibatch for update
     def get_mini_batch(self, *args, **kwargs):
         mini_batch = random.sample(self.memory, self.batch_size)
-        state_batch = [data[0] for data in mini_batch]
+        state_batch = [np.array(data[0]) for data in mini_batch]
         action_batch = [data[1] for data in mini_batch]
         reward_batch = [data[2] for data in mini_batch]
-        next_state_batch = [data[3] for data in mini_batch]
+        next_state_batch = [np.array(data[3]) for data in mini_batch]
         done_batch = [data[4] for data in mini_batch]
-        state_batch = [np.array(item) for item in state_batch]
-        next_state_batch = [np.array(item) for item in next_state_batch]
+        # state_batch = [np.array(item) for item in state_batch]
+        # next_state_batch = [np.array(item) for item in next_state_batch]
         # print (done_batch)
         return state_batch, action_batch, reward_batch, next_state_batch, done_batch
 
@@ -82,7 +82,7 @@ class Replay_Memory:
     # training.
     # size defines the size to sample.
     def get_q_grid(self, size, *args, **kwargs):
-        return [data[0] for data in random.sample(self.memory, size)]
+        return [np.array(data[0]) for data in random.sample(self.memory, size)]
 
 
 # Creates a txt file storing model parameters

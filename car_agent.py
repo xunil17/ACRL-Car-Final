@@ -21,9 +21,9 @@ DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 class CarAgent:
 
     def __init__(self, batch_size, memory_capacity, num_episodes, learning_rate_drop_frame_limit,
-            target_update_frequency, discount = 0.99, delta = 1, model_name = None):
+            target_update_frequency, discount = 0.96, delta = 1, model_name = None):
     
-        self.env = CarEnvironment(seed = [104, 106, 108])
+        self.env = CarEnvironment(seed = [104, 106, 108], flip=True)
         self.architecture = NeuralNet()
         self.explore_rate = Decay_Explore_Rate()
         self.learning_rate = Basic_Learning_Rate()
@@ -143,51 +143,63 @@ class CarAgent:
 
     # Trains the model
     def train(self):
-        # while self.sess.run(self.episode) < self.training_metadata.num_episodes:
+        while self.sess.run(self.episode) < self.training_metadata.num_episodes:
+            #basically grap the episode number from the neural net
+            episode = self.sess.run(self.episode)
+            self.training_metadata.increment_episode()
 
-        #basically grapb the episode number from the neural net
-        episode = self.sess.run(self.episode)
-        self.training_metadata.increment_episode()
-        # increments the episode in the neural net
-        self.sess.run(self.increment_episode_op)
+            # increments the episode in the neural net
+            self.sess.run(self.increment_episode_op)
 
-        # set up car environment
-        state_lazy = self.env.reset()
-        self.env.render()
+            # set up car environment
+            state_lazy = self.env.reset()
+            self.env.render()
 
-        done = False
-        epsilon = self.explore_rate.get(self.training_metadata)
-        alpha = self.learning_rate.get(self.training_metadata)
+            done = False
+            epsilon = self.explore_rate.get(self.training_metadata)
+            alpha = self.learning_rate.get(self.training_metadata)
 
-        print("Episode {0}/{1} \t Epsilon: {2} \t Alpha: {3}".format(episode, self.training_metadata.num_episodes, epsilon, alpha))
-        print ("Replay Memory: %d" % self.replay_memory.length())
-        episode_frame = 0
+            print("Episode {0}/{1} \t Epsilon: {2} \t Alpha: {3}".format(episode, self.training_metadata.num_episodes, epsilon, alpha))
+            print ("Replay Memory: %d" % self.replay_memory.length())
+            episode_frame = 0
 
-        while not done:
+            while not done:
 
-            # Update target weights every update frequency
-            if self.training_metadata.frame % self.target_update_frequency == 0 and (self.training_metadata.frame != 0):
-                self.update_fixed_target_weights()
+                # Update target weights every update frequency
+                if self.training_metadata.frame % self.target_update_frequency == 0 and (self.training_metadata.frame != 0):
+                    self.update_fixed_target_weights()
 
-            # Choose and perform action and update replay memory
-            action = self.get_action(np.array(state_lazy), epsilon)
-            next_state_lazy, reward, done, info = self.env.step(action)
+                # Choose and perform action and update replay memory
+                action = self.get_action(np.array(state_lazy), epsilon)
+                next_state_lazy, reward, done, info = self.env.step(action)
 
-            episode_frame += 1
+                episode_frame += 1
 
-            self.replay_memory.add(self, state_lazy, action, reward, next_state_lazy, done)
+                self.replay_memory.add(self, state_lazy, action, reward, next_state_lazy, done)
 
-            # Train with replay memory if populated
-            if self.replay_memory.length() > 10 * self.replay_memory.batch_size:
-                self.sess.run(self.increment_frames_op)
-                self.training_metadata.increment_frame()
-                self.experience_replay(alpha)
+                # Train with replay memory if populated
+                if self.replay_memory.length() > 10 * self.replay_memory.batch_size:
+                    self.sess.run(self.increment_frames_op)
+                    self.training_metadata.increment_frame()
+                    self.experience_replay(alpha)
 
-            state_lazy = next_state_lazy
-            done = info['true_done']
+                state_lazy = next_state_lazy
+                done = info['true_done']
 
+            # Creating q_grid if not yet defined and calculating average q-value
+            if self.replay_memory.length() > 100 * self.replay_memory.batch_size:
+                self.q_grid = self.replay_memory.get_q_grid(size=200, training_metadata=self.training_metadata)
+            avg_q = self.estimate_avg_q()
 
+            # Saving tensorboard data and model weights
+            if (episode % 30 == 0) and (episode != 0):
+                score, std, rewards = self.test(num_test_episodes=5, visualize=True)
+                print('{0} +- {1}'.format(score, std))
+                self.writer.add_summary(self.sess.run(self.test_summary,
+                                                      feed_dict={self.test_score: score}), episode / 30)
+                self.saver.save(self.sess, self.model_path + '/data.chkp', global_step=self.training_metadata.episode)
 
+            self.writer.add_summary(self.sess.run(self.training_summary, feed_dict={self.avg_q: avg_q}), episode)
 
 
     # Description: Chooses action wrt an e-greedy policy. 
@@ -259,9 +271,9 @@ if __name__ == '__main__':
 
     car_agent = CarAgent(model_name=name, **parameters)
     ########################### Train Model ##########################
-
+    # car_agent.load("/home/sean/RL-2018/src/DQN_Agent/models/no_conv/data.chkp-331")
     car_agent.train()
 
-    ########################### Test Model ##########################3
+    ########################### Test Model ##########################
     # car_agent.load("/home/sean/RL-2018/src/DQN_Agent/models/no_conv/data.chkp-1471")
     # car_agent.test(5, True)

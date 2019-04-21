@@ -19,6 +19,18 @@ class Training_Metadata:
         self.episode += 1
 
 
+# The explore rate decays from 0.6 to 0.1 linearly over the half of the
+# number of episodes defined in the training_metadata and stays at 0.1
+# thereafter
+class Basic_Explore_Rate:
+
+    def get(self, training_metadata):
+        return max(0.1, 0.5* (1 - 2 * float(training_metadata.episode) / training_metadata.num_episodes))
+
+    def __str__(self):
+        return 'max(0.1, 0.5* (1 - 2 * float(training_metadata.episode) / training_metadata.num_episodes))'
+
+
 class Decay_Explore_Rate:
 
     def get(self, training_metadata):

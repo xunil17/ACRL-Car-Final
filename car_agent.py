@@ -11,7 +11,7 @@ import time
 from tensorflow.python.saved_model import tag_constants
 
 from neural_net import NeuralNet
-from agent_helper import Training_Metadata, Decay_Explore_Rate, Basic_Learning_Rate, Replay_Memory, document_parameters
+from agent_helper import Training_Metadata, Decay_Explore_Rate, Basic_Learning_Rate, Replay_Memory, document_parameters, Basic_Explore_Rate
 from car_environment import CarEnvironment
 import argparse
 
@@ -26,7 +26,7 @@ class CarAgent:
     
         self.env = CarEnvironment(seed = [104, 106, 108])
         self.architecture = NeuralNet()
-        self.explore_rate = Decay_Explore_Rate()
+        self.explore_rate = Basic_Explore_Rate()
         self.learning_rate = Basic_Learning_Rate()
         self.model_path = os.path.dirname(os.path.realpath(__file__)) + '/models/' + model_name
         self.log_path = self.model_path + '/log'

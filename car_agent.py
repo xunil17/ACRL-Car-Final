@@ -14,6 +14,7 @@ from neural_net import NeuralNet
 from agent_helper import Training_Metadata, Decay_Explore_Rate, Basic_Learning_Rate, Replay_Memory, document_parameters, Basic_Explore_Rate
 from car_environment import CarEnvironment
 import argparse
+import glob
 
 
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))
@@ -167,7 +168,7 @@ class CarAgent:
 
             max_reward = float('-inf')
 
-            while not done:
+            while True:
 
                 # Update target weights every update frequency
                 if self.training_metadata.frame % self.target_update_frequency == 0 and (self.training_metadata.frame != 0):
@@ -195,15 +196,20 @@ class CarAgent:
 
                 abs_reward = self.env.get_total_reward()
                 max_reward = max(max_reward, abs_reward)
-                if max_reward - abs_reward > 5:
-                    done = True
-
-                if done:
+                
+                if max_reward - abs_reward > 5 or done:
                     print("Episode reward:", abs_reward)
+                    break
 
+            # Saving tensorboard data and model weights
+            if (episode % 30 == 0) and (episode != 0):
+                score, std, rewards = self.test(num_test_episodes=5, visualize=False)
+                print('{0} +- {1}'.format(score, std))
+                self.writer.add_summary(self.sess.run(self.test_summary,
+                                                      feed_dict={self.test_score: score}), episode / 30)
+                self.saver.save(self.sess, self.model_path + '/data.chkp', global_step=self.training_metadata.episode)
 
-
-
+            #self.writer.add_summary(self.sess.run(self.training_summary, feed_dict={self.avg_q: avg_q}), episode)
 
     # Description: Chooses action wrt an e-greedy policy. 
     # Parameters:
@@ -229,7 +235,7 @@ class CarAgent:
             state = np.array(state_lazy)
             episode_reward = 0
             if not visualize:
-                self.test_env.render()
+                self.env.render()
             while not done:
                 if visualize:
                     self.env.render()
@@ -269,13 +275,21 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("model_name", help="model store folder")
     parser.add_argument("--vis", help="do visualization", action="store_true")
+    parser.add_argument("--test", help="do visualization", action="store_true")
     args = parser.parse_args()
 
     car_agent = CarAgent(model_name=args.model_name, **parameters, visualize = args.vis)
     ########################### Train Model ##########################
 
-    car_agent.train()
+    if not args.test:
+        car_agent.train()
+    else:
+        list_of_files = glob.glob(car_agent.model_path + '/*data-*') # find all files in the model folder
+        latest_file = max(list_of_files, key=os.path.getctime) #sort by newest
+        k = latest_file.rfind(".")
+        chkp_file = latest_file[:k]
 
-    ########################### Test Model ##########################3
-    # car_agent.load("/home/sean/RL-2018/src/DQN_Agent/models/no_conv/data.chkp-1471")
-    # car_agent.test(5, True)
+        print("---------Loading file---------------", chkp_file)
+
+        car_agent.load(chkp_file)
+        car_agent.test(5, True)

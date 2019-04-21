@@ -94,6 +94,9 @@ class CarEnvironment:
     def close(self):
         self.env.close()
 
+    def get_total_reward(self):
+        return self.env.reward
+
     def __str__(self):
         return self.name + '\nseed: {0}'.format(self.seed)
 

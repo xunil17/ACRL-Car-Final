@@ -13,6 +13,7 @@ from tensorflow.python.saved_model import tag_constants
 from neural_net import NeuralNet
 from agent_helper import Training_Metadata, Decay_Explore_Rate, Basic_Learning_Rate, Replay_Memory, document_parameters
 from car_environment import CarEnvironment
+import argparse
 
 
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))
@@ -21,7 +22,7 @@ DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 class CarAgent:
 
     def __init__(self, batch_size, memory_capacity, num_episodes, learning_rate_drop_frame_limit,
-            target_update_frequency, discount = 0.99, delta = 1, model_name = None):
+            target_update_frequency, discount = 0.99, delta = 1, model_name = None, visualize = False):
     
         self.env = CarEnvironment(seed = [104, 106, 108])
         self.architecture = NeuralNet()
@@ -29,6 +30,7 @@ class CarAgent:
         self.learning_rate = Basic_Learning_Rate()
         self.model_path = os.path.dirname(os.path.realpath(__file__)) + '/models/' + model_name
         self.log_path = self.model_path + '/log'
+        self.visualize = visualize
 
 
         self.initialize_tf_variables()
@@ -143,48 +145,61 @@ class CarAgent:
 
     # Trains the model
     def train(self):
-        # while self.sess.run(self.episode) < self.training_metadata.num_episodes:
+        while self.sess.run(self.episode) < self.training_metadata.num_episodes:
 
-        #basically grapb the episode number from the neural net
-        episode = self.sess.run(self.episode)
-        self.training_metadata.increment_episode()
-        # increments the episode in the neural net
-        self.sess.run(self.increment_episode_op)
+            #basically grapb the episode number from the neural net
+            episode = self.sess.run(self.episode)
+            self.training_metadata.increment_episode()
+            # increments the episode in the neural net
+            self.sess.run(self.increment_episode_op)
 
-        # set up car environment
-        state_lazy = self.env.reset()
-        self.env.render()
+            # set up car environment
+            state_lazy = self.env.reset()
+            self.env.render()
 
-        done = False
-        epsilon = self.explore_rate.get(self.training_metadata)
-        alpha = self.learning_rate.get(self.training_metadata)
+            done = False
+            epsilon = self.explore_rate.get(self.training_metadata)
+            alpha = self.learning_rate.get(self.training_metadata)
 
-        print("Episode {0}/{1} \t Epsilon: {2} \t Alpha: {3}".format(episode, self.training_metadata.num_episodes, epsilon, alpha))
-        print ("Replay Memory: %d" % self.replay_memory.length())
-        episode_frame = 0
+            print("Episode {0}/{1} \t Epsilon: {2} \t Alpha: {3}".format(episode, self.training_metadata.num_episodes, epsilon, alpha))
+            print ("Replay Memory: %d" % self.replay_memory.length())
+            episode_frame = 0
 
-        while not done:
+            max_reward = float('-inf')
 
-            # Update target weights every update frequency
-            if self.training_metadata.frame % self.target_update_frequency == 0 and (self.training_metadata.frame != 0):
-                self.update_fixed_target_weights()
+            while not done:
 
-            # Choose and perform action and update replay memory
-            action = self.get_action(np.array(state_lazy), epsilon)
-            next_state_lazy, reward, done, info = self.env.step(action)
+                # Update target weights every update frequency
+                if self.training_metadata.frame % self.target_update_frequency == 0 and (self.training_metadata.frame != 0):
+                    self.update_fixed_target_weights()
 
-            episode_frame += 1
+                # Choose and perform action and update replay memory
+                action = self.get_action(np.array(state_lazy), epsilon)
+                next_state_lazy, reward, done, info = self.env.step(action)
 
-            self.replay_memory.add(self, state_lazy, action, reward, next_state_lazy, done)
+                if self.visualize:
+                    self.env.render()
 
-            # Train with replay memory if populated
-            if self.replay_memory.length() > 10 * self.replay_memory.batch_size:
-                self.sess.run(self.increment_frames_op)
-                self.training_metadata.increment_frame()
-                self.experience_replay(alpha)
+                episode_frame += 1
 
-            state_lazy = next_state_lazy
-            done = info['true_done']
+                self.replay_memory.add(self, state_lazy, action, reward, next_state_lazy, done)
+
+                # Train with replay memory if populated
+                if self.replay_memory.length() > 10 * self.replay_memory.batch_size:
+                    self.sess.run(self.increment_frames_op)
+                    self.training_metadata.increment_frame()
+                    self.experience_replay(alpha)
+
+                state_lazy = next_state_lazy
+                done = info['true_done']
+
+                abs_reward = self.env.get_total_reward()
+                max_reward = max(max_reward, abs_reward)
+                if max_reward - abs_reward > 5:
+                    done = True
+
+                if done:
+                    print("Episode reward:", abs_reward)
 
 
 
@@ -251,13 +266,12 @@ if __name__ == '__main__':
     'learning_rate_drop_frame_limit': 250000 #number of frames exploration rate decays over
     }
 
-    try:
-        name = sys.argv[1]
-    except IndexError as err:
-        raise Exception("Did you include model name when running? Ex: python3 car_agent.py testone")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("model_name", help="model store folder")
+    parser.add_argument("--vis", help="do visualization", action="store_true")
+    args = parser.parse_args()
 
-
-    car_agent = CarAgent(model_name=name, **parameters)
+    car_agent = CarAgent(model_name=args.model_name, **parameters, visualize = args.vis)
     ########################### Train Model ##########################
 
     car_agent.train()

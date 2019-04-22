@@ -176,6 +176,7 @@ class CarAgent:
 
                 # Choose and perform action and update replay memory
                 action = self.get_action(np.array(state_lazy), epsilon)
+                #action = self.get_oracle_action(self.env)
                 next_state_lazy, reward, done, info = self.env.step(action)
 
                 if self.visualize:
@@ -222,6 +223,43 @@ class CarAgent:
             return self.env.sample_action_space()
         else:
             return self.sess.run(self.Q_argmax, feed_dict={self.state_tf: [state]})[0]
+
+    def get_oracle_action(self, env):
+        env = env.env
+        a = 4
+
+        car_x = env.car.hull.position[0]
+        car_y = env.car.hull.position[1]
+        car_angle = -env.car.hull.angle
+        car_vel = np.linalg.norm(env.car.hull.linearVelocity)
+
+        target_seg = 0
+        for i in range(len(env.road)):
+            if not env.road[i].road_visited:
+                target_seg = min(i + 3, len(env.road) - 1)
+                break
+
+        target_loc = env.nav_tiles[target_seg]
+        #env.highlight_loc = target_loc
+        angle_to = np.arctan2(target_loc[0] - car_x, target_loc[1] - car_y) - car_angle
+        angle_to = (angle_to + 2 * np.pi) % (2 * np.pi)
+
+        if angle_to > np.pi:
+            angle_to -= 2*np.pi
+        
+        if angle_to < -0.2:
+            a = 0
+
+        if angle_to > 0.2:
+            a = 1
+
+        vel_err = 30 - car_vel
+        #vel_err -= abs(angle_to) * 100
+        vel_err *= 0.1 
+        if vel_err > 0.2:
+            a = 2
+
+        return a
 
     # Description: Tests the model
     # Parameters:

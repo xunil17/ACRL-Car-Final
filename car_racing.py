@@ -117,6 +117,7 @@ class CarRacing(gym.Env, EzPickle):
         self.reward = 0.0
         self.prev_reward = 0.0
         self.verbose = verbose
+        self.highlight_loc = None
 
         self.action_space = spaces.Box( np.array([-1,0,0]), np.array([+1,+1,+1]), dtype=np.float32)  # steer, gas, brake
         self.observation_space = spaces.Box(low=0, high=255, shape=(STATE_H, STATE_W, 3), dtype=np.uint8)
@@ -249,6 +250,8 @@ class CarRacing(gym.Env, EzPickle):
                 border[i-neg] |= border[i]
 
         # Create tiles
+        self.nav_tiles = []
+
         for i in range(len(track)):
             alpha1, beta1, x1, y1 = track[i]
             alpha2, beta2, x2, y2 = track[i-1]
@@ -265,6 +268,8 @@ class CarRacing(gym.Env, EzPickle):
             t.road_visited = False
             t.road_friction = 1.0
             t.fixtures[0].sensor = True
+            #t.position = (x1, y1)
+            self.nav_tiles.append((x1, y1))
             self.road_poly.append(( [road1_l, road1_r, road2_r, road2_l], t.color ))
             self.road.append(t)
             if border[i]:
@@ -417,7 +422,14 @@ class CarRacing(gym.Env, EzPickle):
             gl.glColor4f(color[0], color[1], color[2], 1)
             for p in poly:
                 gl.glVertex3f(p[0], p[1], 0)
+
+
         gl.glEnd()
+
+        if self.highlight_loc is not None:
+            gl.glColor4f(1, 0, 0, 1)
+            gl.glRectf(self.highlight_loc[0], self.highlight_loc[1], self.highlight_loc[0] + 3, self.highlight_loc[1] + 3)
+
 
     def render_indicators(self, W, H):
         gl.glBegin(gl.GL_QUADS)
@@ -483,7 +495,38 @@ if __name__=="__main__":
         steps = 0
         restart = False
         while True:
+
+            car_x = env.car.hull.position[0]
+            car_y = env.car.hull.position[1]
+            car_angle = -env.car.hull.angle
+            car_vel = np.linalg.norm(env.car.hull.linearVelocity)
+
+            target_seg = 0
+            for i in range(len(env.road)):
+                if not env.road[i].road_visited:
+                    target_seg = min(i + 7, len(env.road) - 1)
+                    break
+
+            target_loc = env.nav_tiles[target_seg]
+            env.highlight_loc = target_loc
+            angle_to = np.arctan2(target_loc[0] - car_x, target_loc[1] - car_y) - car_angle
+            angle_to = (angle_to + 2 * np.pi) % (2 * np.pi)
+
+            if angle_to > np.pi:
+                angle_to -= 2*np.pi
+            a[0] = angle_to * 0.2
+
+            vel_err = 50 - car_vel
+            #vel_err -= abs(angle_to) * 100
+            vel_err *= 0.1 
+            if vel_err > 0:
+                a[1] = vel_err
+            else:
+                a[2] = -vel_err
+
             s, r, done, info = env.step(a)
+
+
             total_reward += r
             if steps % 200 == 0 or done:
                 print("\naction " + str(["{:+0.2f}".format(x) for x in a]))

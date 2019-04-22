@@ -4,6 +4,7 @@ import random
 from image_process import process_image
 from collections import deque
 import cv2
+import car_racing
 # import sys
 # import time
 
@@ -13,9 +14,11 @@ class CarEnvironment:
     # stacked_frames is how many frames in a row to use - atari used four
     # seed is list of seeds to sample from during training, input a list of numbers ex: [103, 104, 105]
 
-    def __init__(self, seed=None, stacked_frames=4, flip=False):
+    def __init__(self, seed=None, stacked_frames=4, flip=False, domain_seed = None):
         self.name = "ACRL-Car-Racing"
-        self.env = gym.make('CarRacing-v0')
+        #self.env = gym.make('CarRacing-v0')
+        self.env = car_racing.CarRacing()
+
         self.stacked_frames = stacked_frames
         self.image_dimension = [96,96]
 
@@ -33,6 +36,7 @@ class CarEnvironment:
         self.seed = seed
         self.flip = flip
         self.flip_episode = False
+        self.domain_seed = domain_seed
 
     # shows windows for each image in lazy frame (usually processed next state)
     def show_images_lazy(self, lazyframe):

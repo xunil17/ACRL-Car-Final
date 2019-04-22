@@ -245,6 +245,7 @@ class CarAgent:
                 episode_reward += reward
                 done = info['true_done']
             rewards.append(episode_reward)
+            print(episode_reward)
         return np.mean(rewards), np.std(rewards), rewards
 
     # Description: Returns average Q-value over some number of fixed tracks
@@ -275,7 +276,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("model_name", help="model store folder")
     parser.add_argument("--vis", help="do visualization", action="store_true")
-    parser.add_argument("--test", help="do visualization", action="store_true")
+    parser.add_argument("--test", help="do testing", action="store_true")
     args = parser.parse_args()
 
     car_agent = CarAgent(model_name=args.model_name, **parameters, visualize = args.vis)
@@ -292,4 +293,5 @@ if __name__ == '__main__':
         print("---------Loading file---------------", chkp_file)
 
         car_agent.load(chkp_file)
-        car_agent.test(5, True)
+        score, std, rewards = car_agent.test(50, args.vis)
+        print('{0} +- {1}'.format(score, std))

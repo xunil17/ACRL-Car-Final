@@ -286,6 +286,8 @@ class CarAgent:
             episode_reward = 0
             if not visualize:
                 self.env.render()
+
+            max_reward = float('-inf')
             while not done:
                 if visualize:
                     self.env.render()
@@ -294,6 +296,13 @@ class CarAgent:
                 state = np.array(next_state_lazy)
                 episode_reward += reward
                 done = info['true_done']
+
+                abs_reward = self.env.get_total_reward()
+                max_reward = max(max_reward, abs_reward)
+                
+                if max_reward - abs_reward > 300:
+                    done = True
+
             rewards.append(episode_reward)
             print(episode_reward)
         return np.mean(rewards), np.std(rewards), rewards

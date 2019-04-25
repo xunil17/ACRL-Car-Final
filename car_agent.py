@@ -179,7 +179,7 @@ class CarAgent:
                 if random.random() < 0.8:
                     action = self.get_oracle_action(self.env)
                 else:
-                    action = self.get_action(np.array(state_lazy), epsilon)
+                    action = self.get_action(np.array(state_lazy), 0)
 
 
                 next_state_lazy, reward, done, info = self.env.step(action)
@@ -253,23 +253,22 @@ class CarAgent:
 
         if angle_to > np.pi:
             angle_to -= 2*np.pi
+
+        vel_err = 35 - car_vel
+        if vel_err > 2:
+            a = 2
         
-        if angle_to < -0.2 * self.damping_mult:
+        if angle_to < -0.15 * self.damping_mult:
             a = 0
 
-        if angle_to > 0.2 * self.damping_mult:
+        if angle_to > 0.15 * self.damping_mult:
             a = 1
 
-        vel_err = 30 - car_vel
-        #vel_err -= abs(angle_to) * 100
-        vel_err *= 0.1 
-        if vel_err > 0.2 * self.damping_mult:
-            a = 2
-
         if a == 4:
-            self.damping_mult = 1
+            self.damping_mult /= 1.5
+            self.damping_mult = max(self.damping_mult, 1)
         else:
-            self.damping_mult = 1.2
+            self.damping_mult *= 1.2
 
         return a
 
@@ -297,10 +296,8 @@ class CarAgent:
                 episode_reward += reward
                 done = info['true_done']
 
-                abs_reward = self.env.get_total_reward()
-                max_reward = max(max_reward, abs_reward)
-                
-                if max_reward - abs_reward > 300:
+                if(self.env.env.t > 30):
+                    print("Ended due to time limit")
                     done = True
 
             rewards.append(episode_reward)

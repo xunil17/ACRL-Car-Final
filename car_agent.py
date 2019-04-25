@@ -145,7 +145,7 @@ class CarAgent:
 
 
     # Trains the model
-    def train(self):
+    def train(self, imitation = False):
         while self.sess.run(self.episode) < self.training_metadata.num_episodes:
 
             #basically grapb the episode number from the neural net
@@ -176,8 +176,11 @@ class CarAgent:
 
                 # Choose and perform action and update replay memory
 
-                if random.random() < 0.8:
-                    action = self.get_oracle_action(self.env)
+                if random.random() < epsilon:
+                    if imitation:
+                        action = self.get_oracle_action(self.env)
+                    else:
+                        action = self.env.sample_action_space()
                 else:
                     action = self.get_action(np.array(state_lazy), 0)
 
@@ -216,6 +219,11 @@ class CarAgent:
                 self.writer.add_summary(self.sess.run(self.test_summary,
                                                       feed_dict={self.test_score: score}), episode / 30)
                 self.saver.save(self.sess, self.model_path + '/data.chkp', global_step=self.training_metadata.episode)
+
+                file = open(self.model_path + '/trainlog.txt', "a+")
+                printstr = '%f %f %f %f %f \n' % (score, std, episode, alpha, epsilon)
+                file.write(printstr)
+                file.close()
 
             self.writer.add_summary(self.sess.run(self.training_summary, feed_dict={self.avg_q: avg_q}), episode)
 
@@ -334,6 +342,7 @@ if __name__ == '__main__':
     parser.add_argument("--vis", help="do visualization", action="store_true")
     parser.add_argument("--test", help="do testing", action="store_true")
     parser.add_argument("--load", help="load previous model file", action="store_true")
+    parser.add_argument("--im", help="use imitation learning", action="store_true")
     args = parser.parse_args()
 
     car_agent = CarAgent(model_name=args.model_name, **parameters, visualize = args.vis)
@@ -348,7 +357,7 @@ if __name__ == '__main__':
                 print("---------Loading file---------------", chkp_file)
                 car_agent.load(chkp_file)
 
-        car_agent.train()
+        car_agent.train(imitation = args.im)
     else:
         list_of_files = glob.glob(car_agent.model_path + '/*data-*') # find all files in the model folder
         latest_file = max(list_of_files, key=os.path.getctime) #sort by newest

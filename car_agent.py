@@ -32,7 +32,7 @@ class CarAgent:
         self.model_path = os.path.dirname(os.path.realpath(__file__)) + '/models/' + model_name
         self.log_path = self.model_path + '/log'
         self.visualize = visualize
-
+        self.damping_mult = 1
 
         self.initialize_tf_variables()
 
@@ -175,8 +175,13 @@ class CarAgent:
                     self.update_fixed_target_weights()
 
                 # Choose and perform action and update replay memory
-                action = self.get_action(np.array(state_lazy), epsilon)
-                #action = self.get_oracle_action(self.env)
+
+                if random.random() < 0.8:
+                    action = self.get_oracle_action(self.env)
+                else:
+                    action = self.get_action(np.array(state_lazy), epsilon)
+
+
                 next_state_lazy, reward, done, info = self.env.step(action)
 
                 if self.visualize:
@@ -191,6 +196,8 @@ class CarAgent:
                     self.sess.run(self.increment_frames_op)
                     self.training_metadata.increment_frame()
                     self.experience_replay(alpha)
+
+                avg_q = self.estimate_avg_q()
 
                 state_lazy = next_state_lazy
                 done = info['true_done']
@@ -210,7 +217,7 @@ class CarAgent:
                                                       feed_dict={self.test_score: score}), episode / 30)
                 self.saver.save(self.sess, self.model_path + '/data.chkp', global_step=self.training_metadata.episode)
 
-            #self.writer.add_summary(self.sess.run(self.training_summary, feed_dict={self.avg_q: avg_q}), episode)
+            self.writer.add_summary(self.sess.run(self.training_summary, feed_dict={self.avg_q: avg_q}), episode)
 
     # Description: Chooses action wrt an e-greedy policy. 
     # Parameters:
@@ -247,17 +254,22 @@ class CarAgent:
         if angle_to > np.pi:
             angle_to -= 2*np.pi
         
-        if angle_to < -0.2:
+        if angle_to < -0.2 * self.damping_mult:
             a = 0
 
-        if angle_to > 0.2:
+        if angle_to > 0.2 * self.damping_mult:
             a = 1
 
         vel_err = 30 - car_vel
         #vel_err -= abs(angle_to) * 100
         vel_err *= 0.1 
-        if vel_err > 0.2:
+        if vel_err > 0.2 * self.damping_mult:
             a = 2
+
+        if a == 4:
+            self.damping_mult = 1
+        else:
+            self.damping_mult = 1.2
 
         return a
 
@@ -315,12 +327,21 @@ if __name__ == '__main__':
     parser.add_argument("model_name", help="model store folder")
     parser.add_argument("--vis", help="do visualization", action="store_true")
     parser.add_argument("--test", help="do testing", action="store_true")
+    parser.add_argument("--load", help="load previous model file", action="store_true")
     args = parser.parse_args()
 
     car_agent = CarAgent(model_name=args.model_name, **parameters, visualize = args.vis)
     ########################### Train Model ##########################
 
     if not args.test:
+        if args.load:
+                list_of_files = glob.glob(car_agent.model_path + '/*data-*') # find all files in the model folder
+                latest_file = max(list_of_files, key=os.path.getctime) #sort by newest
+                k = latest_file.rfind(".")
+                chkp_file = latest_file[:k]
+                print("---------Loading file---------------", chkp_file)
+                car_agent.load(chkp_file)
+
         car_agent.train()
     else:
         list_of_files = glob.glob(car_agent.model_path + '/*data-*') # find all files in the model folder

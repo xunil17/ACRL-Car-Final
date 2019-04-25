@@ -496,7 +496,7 @@ if __name__=="__main__":
         restart = False
         while True:
 
-            car_x = env.car.hull.position[0]
+            '''car_x = env.car.hull.position[0]
             car_y = env.car.hull.position[1]
             car_angle = -env.car.hull.angle
             car_vel = np.linalg.norm(env.car.hull.linearVelocity)
@@ -522,7 +522,7 @@ if __name__=="__main__":
             if vel_err > 0:
                 a[1] = vel_err
             else:
-                a[2] = -vel_err
+                a[2] = -vel_err'''
 
             s, r, done, info = env.step(a)
 

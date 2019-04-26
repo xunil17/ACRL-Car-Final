@@ -206,7 +206,7 @@ class CarAgent:
 
             # Saving tensorboard data and model weights
             if (episode % 30 == 0) and (episode != 0):
-                score, std, rewards = self.test(num_test_episodes=5, visualize=True)
+                score, std, rewards = self.test(num_test_episodes=5, visualize=self.visualize)
                 print('{0} +- {1}'.format(score, std))
                 self.writer.add_summary(self.sess.run(self.test_summary,
                                                       feed_dict={self.test_score: score}), episode / 30)
@@ -277,7 +277,9 @@ class CarAgent:
         for episode in range(num_test_episodes):
             done = False
             state_lazy = self.env.reset(test=True)
-            input()
+            #input()
+            self.env.render()
+
             state = np.array(state_lazy)
             episode_reward = 0
             max_reward = float('-inf')
@@ -288,7 +290,7 @@ class CarAgent:
                 next_state_lazy, reward, done, info = self.env.step(action, test=True)
                 state = np.array(next_state_lazy)
                 episode_reward += reward
-                # done = info['true_done']
+                done = info['true_done']
 
                 if(self.env.env.t > 30):
                     print("Ended due to time limit")

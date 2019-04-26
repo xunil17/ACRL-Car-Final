@@ -481,6 +481,7 @@ if __name__=="__main__":
         if k==key.UP:    a[1] = 0
         if k==key.DOWN:  a[2] = 0
     env = CarRacing()
+    env.seed()
     env.render()
     env.viewer.window.on_key_press = key_press
     env.viewer.window.on_key_release = key_release

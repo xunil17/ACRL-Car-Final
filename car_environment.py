@@ -81,6 +81,10 @@ class CarEnvironment:
     def reset(self, test=False):
         if self.seed:
             self.env.seed(random.choice(self.seed))
+
+        if test:
+            self.env.seed() #set to random seed at test time
+
         self.flip_episode = random.random() > 0.5 and not test and self.flip
         # self.flip_episode = True
         return self.process(self.env.reset())

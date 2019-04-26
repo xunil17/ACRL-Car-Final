@@ -1,31 +1,27 @@
 import sys
 sys.dont_write_bytecode = True
 
-import gym
 import numpy as np
-import tensorflow as tf
 import random
 import os
-import subprocess
-import time
+import argparse
+import glob
+
+import gym
+import tensorflow as tf
 from tensorflow.python.saved_model import tag_constants
 
 from neural_net import NeuralNet
 from agent_helper import Training_Metadata, Decay_Explore_Rate, Basic_Learning_Rate, Replay_Memory, document_parameters, Basic_Explore_Rate
 from car_environment import CarEnvironment
-import argparse
-import glob
-
-
-DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 
 
 class CarAgent:
 
     def __init__(self, batch_size, memory_capacity, num_episodes, learning_rate_drop_frame_limit,
-            target_update_frequency, discount = 0.99, delta = 1, model_name = None, visualize = False):
+            target_update_frequency, seeds = [104, 106, 108], discount = 0.99, delta = 1, model_name = None, visualize = False):
     
-        self.env = CarEnvironment(seed = [104, 106, 108])
+        self.env = CarEnvironment(seed = seeds)
         self.architecture = NeuralNet()
         self.explore_rate = Basic_Explore_Rate()
         self.learning_rate = Basic_Learning_Rate()
@@ -39,15 +35,12 @@ class CarAgent:
         self.target_update_frequency = target_update_frequency
         self.discount = discount
         self.replay_memory = Replay_Memory(memory_capacity, batch_size)
-        self.training_metadata = Training_Metadata(frame=0, frame_limit = learning_rate_drop_frame_limit, 
-                                                    episode = 0, num_episodes=num_episodes)
+        self.training_metadata = Training_Metadata(frame=0, frame_limit = learning_rate_drop_frame_limit, episode = 0, num_episodes=num_episodes)
 
         self.delta = delta
         document_parameters(self)
 
-    # Description: Sets up tensorflow graph and other variables, only called internally
-    # Parameters: None
-    # Output: None
+    # sets up tensorflow graph - called in setup
     def initialize_tf_variables(self):
         # Setting up game specific variables
         self.state_size = self.env.state_space_size
@@ -87,8 +80,6 @@ class CarAgent:
         # NAME                          FEED DEPENDENCIES
         # loss                          y_tf, state_tf, action_tf
         # train_op                      y_tf, state_tf, action_tf, alpha
-
-        # self.loss = tf.losses.mean_squared_error(self.y_tf, self.Q_value_at_action)
         self.loss = tf.losses.huber_loss(self.y_tf, self.Q_value_at_action)
         self.optimizer = tf.train.AdamOptimizer(learning_rate=self.alpha)
         self.train_op = self.optimizer.minimize(self.loss, name='train_minimize')
@@ -118,18 +109,21 @@ class CarAgent:
 
         self.sess.graph.finalize()
 
-    # Description: Performs one step of batch gradient descent on the DDQN loss function. 
-    # Parameters:
-    # - alpha: Number, the learning rate 
-    # Output: None
+    # Performs one step of batch gradient descent on the DDQN loss function. 
+    # alpha = learning rate 
     def experience_replay(self, alpha):
-        state_batch, action_batch, reward_batch, next_state_batch, done_batch = self.replay_memory.get_mini_batch(self.training_metadata)
-        y_batch = [None] * self.replay_memory.batch_size
-        fixed_feed_dict = {self.state_tf: next_state_batch}
-        fixed_feed_dict.update(zip(self.trainable_variables, self.fixed_target_weights))
 
+        state_batch, action_batch, reward_batch, next_state_batch, done_batch = self.replay_memory.get_mini_batch(self.training_metadata)
+        
+        # get argmax of q-network
         greedy_actions = self.sess.run(self.onehot_greedy_action, feed_dict={self.state_tf: next_state_batch})
-        fixed_feed_dict.update({self.action_tf: greedy_actions})
+
+        y_batch = [None] * self.replay_memory.batch_size
+        fixed_feed_dict = {self.state_tf: next_state_batch, self.action_tf: greedy_actions}
+        fixed_feed_dict.update(zip(self.trainable_variables, self.fixed_target_weights))
+        # fixed_feed_dict.update()
+
+
         Q_batch = self.sess.run(self.Q_value_at_action, feed_dict=fixed_feed_dict)
 
         y_batch = reward_batch + self.discount * np.multiply(np.invert(done_batch), Q_batch)
@@ -137,9 +131,7 @@ class CarAgent:
         feed = {self.state_tf: state_batch, self.action_tf: action_batch, self.y_tf: y_batch, self.alpha: alpha}
         self.sess.run(self.train_op, feed_dict=feed)
 
-    # Description: Updates the weights of the target network
-    # Parameters:   None
-    # Output:       None
+    # Updates weights of target network
     def update_fixed_target_weights(self):
         self.fixed_target_weights = self.sess.run(self.trainable_variables)
 
@@ -214,7 +206,7 @@ class CarAgent:
 
             # Saving tensorboard data and model weights
             if (episode % 30 == 0) and (episode != 0):
-                score, std, rewards = self.test(num_test_episodes=5, visualize=False)
+                score, std, rewards = self.test(num_test_episodes=5, visualize=True)
                 print('{0} +- {1}'.format(score, std))
                 self.writer.add_summary(self.sess.run(self.test_summary,
                                                       feed_dict={self.test_score: score}), episode / 30)
@@ -227,11 +219,10 @@ class CarAgent:
 
             self.writer.add_summary(self.sess.run(self.training_summary, feed_dict={self.avg_q: avg_q}), episode)
 
-    # Description: Chooses action wrt an e-greedy policy. 
-    # Parameters:
-    # - state:      Tensor representing a single state
-    # - epsilon:    Number in (0,1)
-    # Output:       Integer in the range 0...self.action_size-1 representing an action
+    # Chooses action wrt an e-greedy policy. 
+    # - state      Tensor representing a single state
+    # - epsilon    Number in (0,1)
+    # Output       Integer in the range 0...self.action_size-1 representing an action
     def get_action(self, state, epsilon):
         # Performing epsilon-greedy action selection
         if random.random() < epsilon:
@@ -280,20 +271,15 @@ class CarAgent:
 
         return a
 
-    # Description: Tests the model
-    # Parameters:
-    # - num_test_episodes:  Integer, giving the number of episodes to be tested over
-    # - visualize:          Boolean, gives whether should render the testing gameplay
+    # Tests the model
     def test(self, num_test_episodes, visualize):
         rewards = []
         for episode in range(num_test_episodes):
             done = False
             state_lazy = self.env.reset(test=True)
+            input()
             state = np.array(state_lazy)
             episode_reward = 0
-            if not visualize:
-                self.env.render()
-
             max_reward = float('-inf')
             while not done:
                 if visualize:
@@ -302,7 +288,7 @@ class CarAgent:
                 next_state_lazy, reward, done, info = self.env.step(action, test=True)
                 state = np.array(next_state_lazy)
                 episode_reward += reward
-                done = info['true_done']
+                # done = info['true_done']
 
                 if(self.env.env.t > 30):
                     print("Ended due to time limit")
@@ -312,18 +298,14 @@ class CarAgent:
             print(episode_reward)
         return np.mean(rewards), np.std(rewards), rewards
 
-    # Description: Returns average Q-value over some number of fixed tracks
-    # Parameters:   None
-    # Output:       None
+    # average Q-value over some number of fixed tracks
     def estimate_avg_q(self):
         if not self.q_grid:
             return 0
         return np.average(np.amax(self.sess.run(self.Q_value, feed_dict={self.state_tf: self.q_grid}), axis=1))
 
-    # Description: Loads a model trained in a previous session
-    # Parameters:
+    # loads a model trained in a previous session
     # - path:   String, giving the path to the checkpoint file to be loaded
-    # Output:   None
     def load(self, path):
         self.saver.restore(self.sess, path)
 
@@ -334,7 +316,9 @@ if __name__ == '__main__':
     'batch_size': 32, # define size of mini-batch
     'memory_capacity': 50000,  #capacity of replay memory
     'num_episodes': 3000, # number of training episodes
-    'learning_rate_drop_frame_limit': 250000 #number of frames exploration rate decays over
+    'learning_rate_drop_frame_limit': 250000, #number of frames exploration rate decays over
+    # 'seeds': random.sample(range(1,200),50)
+    # 'seeds': [108]
     }
 
     parser = argparse.ArgumentParser()

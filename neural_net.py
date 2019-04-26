@@ -21,4 +21,4 @@ class NeuralNet:
         return output
 
     def __str__(self):
-        return "Architecture used in the nature paper in 2015 with dropout on dense layers, 0.7 keep prob."
+        return "nature 2015, dropout, 0.7 prob"

@@ -54,7 +54,7 @@ class CarEnvironment:
         total_reward = 0
         # n = random.choice([2,3,4])
         n = 1 if test else random.choice([2,3,4])
-        for _ in range(n):
+        for j in range(n):
             next_state, reward, done, info = self.env.step(action)
             total_reward += reward
             info = {'true_done': done}
@@ -142,7 +142,7 @@ class LazyFrames(object):
 if __name__ == '__main__':
     env = CarEnvironment(flip = True)
     env.reset()
-    for _ in range(20):
+    for _ in range(50):
         env.render()
         env.step(env.sample_action_space())
         cv2.waitKey()

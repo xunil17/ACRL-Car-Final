@@ -83,7 +83,7 @@ class Replay_Memory:
     # next_state defines the current stack of images
     def add(self, agent, state_lazy, action, reward, next_state_lazy, done):
         # convert the action to one hot action for easier computation
-        one_hot_action = np.zeros(agent.action_size)
+        one_hot_action = np.zeros(agent.architecture.action_size)
         one_hot_action[action] = 1
         self.memory.append((state_lazy, one_hot_action, reward, next_state_lazy, done))
         # delete the earliest episode if memory is full

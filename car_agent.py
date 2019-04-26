@@ -236,7 +236,6 @@ class CarAgent:
         for episode in range(num_test_episodes):
             done = False
             state_lazy = self.env.reset(test=True)
-            input()
             state = np.array(state_lazy)
             episode_reward = 0
             max_reward = float('-inf')

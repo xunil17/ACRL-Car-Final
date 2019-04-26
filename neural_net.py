@@ -2,7 +2,6 @@ import sys
 sys.dont_write_bytecode = True
 
 import tensorflow as tf
-import numpy as np
 
 class NeuralNet:
     def __init__(self, state_size, action_size, state_shape):
